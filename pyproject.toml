@@ -1,0 +1,23 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "wheel",
+    "torch",        # so torch.utils.cpp_extension is available at build time
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torch_tensor_ipc"
+version = "0.1.0"
+description = "A python package for sharing PyTorch CUDA tensors between non-spawn or -folk processes with zero copy."
+authors = [
+    { name = "Changhai Man", email = "changhai0109@hotmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "torch",  # runtime dependency
+]
+
+[project.urls]
+Homepage = "https://example.com"

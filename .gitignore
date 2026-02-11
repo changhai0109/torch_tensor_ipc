@@ -1,1 +1,17 @@
 **/__pycache__/
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/__init__.py
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/_cuda_ipc_ext.cpp
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/client.py
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/cuda_ipc_ext_module.cpython-311-x86_64-linux-gnu.so
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/cuda_ipc_ext.py
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/protocol.py
+build/lib.linux-x86_64-cpython-311/torch_tensor_ipc/server.py
+build/temp.linux-x86_64-cpython-311/.ninja_deps
+build/temp.linux-x86_64-cpython-311/.ninja_log
+build/temp.linux-x86_64-cpython-311/build.ninja
+build/temp.linux-x86_64-cpython-311/torch_tensor_ipc/_cuda_ipc_ext.o
+torch_tensor_ipc.egg-info/dependency_links.txt
+torch_tensor_ipc.egg-info/PKG-INFO
+torch_tensor_ipc.egg-info/requires.txt
+torch_tensor_ipc.egg-info/SOURCES.txt
+torch_tensor_ipc.egg-info/top_level.txt
