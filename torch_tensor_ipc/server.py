@@ -3,6 +3,8 @@ import os
 import socket
 import json
 import struct
+import sys
+import threading
 from . import cuda_ipc_ext as ext
 from . import protocol as proto
 
@@ -29,11 +31,11 @@ class GpuIpcConnection:
         self.conn.sendall(header + payload)
 
     def send_tensor(self, tensor):
-        handle_bytes, nbytes = ext.export_tensor_ipc(tensor)
+        handle_bytes, device_uuid, nbytes = ext.export_tensor_ipc(tensor)
         if len(handle_bytes) != proto.HANDLE_SIZE:
             raise ValueError("Handle size mismatch")
 
-        meta_bytes = proto.pack_tensor_meta(tensor, nbytes)
+        meta_bytes = proto.pack_tensor_meta(tensor, nbytes, device_uuid)
         payload = meta_bytes + handle_bytes
 
         header = proto.pack_packet_header(proto.MSG_TYPE_TENSOR, len(payload))
@@ -73,7 +75,11 @@ class GpuIpcServer:
         try:
             while True:
                 conn_sock, _ = self.sock.accept()
-                self._handle_client(conn_sock)
+                client_thread = threading.Thread(
+                    target=self._handle_client, args=(conn_sock,)
+                )
+                client_thread.daemon = True
+                client_thread.start()
         except KeyboardInterrupt:
             self.close()
 
@@ -95,6 +101,8 @@ class GpuIpcServer:
                     conn.send_tensor(self.registry[name])
                 else:
                     conn.send_error(f"Tensor '{name}' not found")
+            elif cmd == "LIST":
+                conn.send_json({"tensors": list(self.registry.keys())})
             else:
                 conn.send_error(f"Unknown command: {cmd}")
 
@@ -107,3 +115,40 @@ class GpuIpcServer:
         self.sock.close()
         if os.path.exists(self.path):
             os.unlink(self.path)
+
+
+if __name__ == "__main__":
+    import torch
+    import time
+    import random
+    import multiprocessing
+
+    SOCKET_PATH = "/tmp/gpu_ipc_socket"
+    ready_event = multiprocessing.Event()
+
+    # 1. 创建 Tensor (在 Server 进程中创建，确保它们在 GPU 上)
+    t1 = torch.full((1024, 1024), 3.14159, device="cuda", dtype=torch.float32).to(
+        "cuda:1"
+    )
+    t2 = torch.arange(100, device="cuda", dtype=torch.float32).to("cuda:0")
+
+    # 2. 启动 Server 进程
+    def server_process_func(ready_event):
+        server = GpuIpcServer(SOCKET_PATH)
+        server.register("matrix_a", t1)
+        server.register("vector_b", t2)
+        ready_event.set()  # 通知主进程 Server 已就绪
+        server.run_forever()
+
+    server_process = multiprocessing.Process(
+        target=server_process_func, args=(ready_event,)
+    )
+    server_process.start()
+
+    # 等待 Server 启动
+    if not ready_event.wait(timeout=5):
+        print("Error: Server failed to start in 5 seconds.")
+        if server_process.is_alive():
+            server_process.terminate()
+        sys.exit(1)
+    print("Server is ready. You can run the client now.")

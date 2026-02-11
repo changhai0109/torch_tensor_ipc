@@ -57,7 +57,7 @@ DTYPE_TO_CODE = {
 }
 CODE_TO_DTYPE = {v: k for k, v in DTYPE_TO_CODE.items()}
 
-TENSOR_HEADER_FMT = "!10sBBBBQ" + "Q" * MAX_DIMS
+TENSOR_HEADER_FMT = f"!{len(MAGIC)}sBBBBQ" + "Q" * MAX_DIMS + "16s"
 TENSOR_HEADER_SIZE = struct.calcsize(TENSOR_HEADER_FMT)
 
 
@@ -70,7 +70,7 @@ def unpack_packet_header(header_bytes: bytes):
     return msg_type, payload_len
 
 
-def pack_tensor_meta(tensor, nbytes):
+def pack_tensor_meta(tensor, nbytes, device_uuid):
     shape = list(tensor.shape)
     ndim = len(shape)
     if ndim > MAX_DIMS:
@@ -80,6 +80,8 @@ def pack_tensor_meta(tensor, nbytes):
 
     shape_padded = shape + [0] * (MAX_DIMS - ndim)
 
+    device_uuid_bytes = device_uuid
+    assert len(device_uuid_bytes) == 16, "Device UUID must be 16 bytes"
     meta = struct.pack(
         TENSOR_HEADER_FMT,
         MAGIC,
@@ -89,6 +91,7 @@ def pack_tensor_meta(tensor, nbytes):
         0,  # flags
         nbytes,
         *shape_padded,
+        device_uuid_bytes,
     )
     return meta
 
@@ -106,4 +109,11 @@ def unpack_tensor_meta(meta_bytes):
 
     dtype = CODE_TO_DTYPE.get(dtype_code, torch.float32)
 
-    return {"dtype": dtype, "shape": list(shape), "nbytes": nbytes}
+    device_uuid = unpacked[6 + MAX_DIMS]
+
+    return {
+        "dtype": dtype,
+        "shape": list(shape),
+        "nbytes": nbytes,
+        "device_uuid": device_uuid,
+    }

@@ -19,17 +19,12 @@ _ext = load(
 
 def export_tensor_ipc(tensor: torch.Tensor):
     """
-    导出 Tensor 的 IPC 句柄。
     Returns:
-        (handle_bytes, nbytes)
+        (handle_bytes, device_uuid, nbytes):
     """
-    return _ext.export_tensor_ipc(tensor)
+    ret = _ext.export_tensor_ipc(tensor)
+    return ret
 
 
-def tensor_from_ipc_bytes(
-    handle_bytes: bytes, shape: list, dtype: torch.dtype, device_index: int = 0
-):
-    """
-    从 IPC 句柄重建 Tensor。
-    """
-    return _ext.tensor_from_ipc_bytes(handle_bytes, shape, dtype, device_index)
+def tensor_from_ipc_bytes(handle_bytes, shape, dtype, device_uuid):
+    return _ext.tensor_from_ipc_bytes(handle_bytes, shape, dtype, device_uuid)

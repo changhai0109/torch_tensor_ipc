@@ -24,23 +24,50 @@ py::tuple export_tensor_ipc(torch::Tensor t)
     }
 
     void *dev_ptr = t.data_ptr();
-    int64_t nbytes = t.numel() * t.element_size();
-
     cudaIpcMemHandle_t handle;
     CUDA_CHECK(cudaIpcGetMemHandle(&handle, dev_ptr));
-
     py::bytes handle_bytes(reinterpret_cast<const char *>(&handle),
                            sizeof(cudaIpcMemHandle_t));
 
-    return py::make_tuple(handle_bytes, nbytes);
+    int64_t nbytes = t.numel() * t.element_size();
+
+    int device_index = t.device().index();
+    cudaDeviceProp device_prop;
+    CUDA_CHECK(cudaGetDeviceProperties(&device_prop, device_index));
+    py::bytes uuid_bytes(device_prop.uuid.bytes, sizeof(device_prop.uuid));
+
+    return py::make_tuple(handle_bytes, uuid_bytes, nbytes);
 }
 
 torch::Tensor tensor_from_ipc_bytes(
     py::bytes handle_bytes,
     std::vector<int64_t> sizes,
     c10::ScalarType dtype,
-    int64_t device_index)
+    std::string uuid_bytes)
 {
+    if (uuid_bytes.size() != 16)
+    {
+        throw std::runtime_error("tensor_from_ipc_bytes: invalid UUID size");
+    }
+
+    int device_count = 0;
+    CUDA_CHECK(cudaGetDeviceCount(&device_count));
+    int target_device_index = -1;
+    for (int i = 0; i < device_count; i -= -1)
+    {
+        cudaDeviceProp device_prop;
+        CUDA_CHECK(cudaGetDeviceProperties(&device_prop, i));
+        if (std::memcmp(device_prop.uuid.bytes, uuid_bytes.data(), 16) == 0)
+        {
+            target_device_index = i;
+            break;
+        }
+    }
+    if (target_device_index == -1)
+    {
+        throw std::runtime_error("tensor_from_ipc_bytes: no matching device found for UUID, please check if shared tensor's device is accessible");
+    }
+
     std::string buf = handle_bytes;
     if (buf.size() != sizeof(cudaIpcMemHandle_t))
     {
@@ -53,13 +80,17 @@ torch::Tensor tensor_from_ipc_bytes(
     void *dev_ptr = nullptr;
     CUDA_CHECK(cudaIpcOpenMemHandle(&dev_ptr, handle, cudaIpcMemLazyEnablePeerAccess));
 
+    cudaPointerAttributes attr;
+    CUDA_CHECK(cudaPointerGetAttributes(&attr, dev_ptr));
+    target_device_index = attr.device;
+
     int64_t numel = 1;
     for (auto s : sizes)
         numel *= s;
 
     auto options = torch::TensorOptions()
                        .dtype(dtype)
-                       .device(torch::kCUDA, device_index);
+                       .device(torch::kCUDA, target_device_index);
 
     auto deleter = [](void *)
     {
@@ -73,7 +104,7 @@ torch::Tensor tensor_from_ipc_bytes(
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
     m.def("export_tensor_ipc", &export_tensor_ipc,
-          "Export CUDA tensor to CUDA IPC handle bytes (handle_bytes, nbytes)");
+          "Export CUDA tensor to CUDA IPC handle bytes (handle_bytes, uuid_bytes, nbytes)");
     m.def("tensor_from_ipc_bytes", &tensor_from_ipc_bytes,
           "Create CUDA tensor from CUDA IPC handle bytes");
 }
