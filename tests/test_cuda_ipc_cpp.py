@@ -12,9 +12,9 @@ def consumer_process(rank, queue):
     print(f"[Consumer] Started (PID: {os.getpid()})")
 
     # 1. 从队列获取元数据
-    # meta: (handle_bytes, shape, dtype, device_index)
+    # meta: (handle_bytes, shape, dtype, device_uuid)
     try:
-        handle_bytes, shape, dtype, device_idx = queue.get(timeout=10)
+        handle_bytes, shape, dtype, device_uuid = queue.get(timeout=10)
     except Exception as e:
         print(f"[Consumer] Queue empty or error: {e}")
         return
@@ -23,7 +23,7 @@ def consumer_process(rank, queue):
 
     # 2. 重建 Tensor (Zero-copy)
     # 注意：这个 tensor 指向的是 Producer 的显存
-    t_remote = ext.tensor_from_ipc_bytes(handle_bytes, shape, dtype, device_idx)
+    t_remote = ext.tensor_from_ipc_bytes(handle_bytes, shape, dtype, device_uuid)
 
     print(f"[Consumer] Tensor info: shape={t_remote.shape}, device={t_remote.device}")
     print(f"[Consumer] Data sample: {t_remote[0, :5]}")
@@ -53,7 +53,7 @@ def run_test():
     print(f"[Producer] Original tensor sample: {t_original[0, :5]}")
 
     # 2. 导出 Handle
-    handle_bytes, nbytes = ext.export_tensor_ipc(t_original)
+    handle_bytes, device_uuid, nbytes = ext.export_tensor_ipc(t_original)
     print(f"[Producer] Exported handle ({len(handle_bytes)} bytes)")
 
     # 3. 启动消费者进程
@@ -63,7 +63,7 @@ def run_test():
 
     # 4. 发送元数据给消费者
     # 注意：我们必须把 shape 和 dtype 也传过去，因为 handle 里不包含这些
-    queue.put((handle_bytes, list(t_original.shape), t_original.dtype, device_id))
+    queue.put((handle_bytes, list(t_original.shape), t_original.dtype, device_uuid))
 
     # 5. 等待消费者完成
     p.join()
